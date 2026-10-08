@@ -36,7 +36,7 @@ The first boot takes about 45 seconds on a M5 MacBook. If you land on a user pic
 
 The script installs `erofs-utils`, `e2fsprogs`, `lz4` and `pkgconf` from Homebrew if they're missing. It never asks for `sudo`.
 
-We've only run this on one machine (M5, 16 GB, macOS 27). It *should* work on other Apple Silicon Macs, but nobody's tried yet — if you do, tell us how it went.
+We build and test on one machine (M5, 16 GB, macOS 27). A couple of people have reported it working on M4 Macs too — if you try it on something else, tell us how it went.
 
 ## Using it
 
