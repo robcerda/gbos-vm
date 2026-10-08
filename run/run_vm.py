@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Run the Googlebook VM once with an explicit QEMU command line.
 
-  run_vm.py WORK RUN_NAME [--seconds N] [--snapshot] [--offline] [--no-audio]
+  run_vm.py WORK RUN_NAME [--seconds N] [--snapshot] [--offline] [--no-audio] [--no-bluetooth]
             [--display WxH] [--memory MIB] [--cpus N]
 
 WORK is the build folder (host/, image/, UTM-beta/). Logs and sockets go to WORK/logs/RUN_NAME.
 The disk is written to unless --snapshot is given. Networking is QEMU user-mode NAT with no
 inbound forwards; --offline removes it (the pointer/clipboard helper then cannot connect).
 On stop, Android is asked to power off through the guest control channel before QEMU is killed.
+
+Bluetooth: if the Android emulator's netsimd is installed (SDK "emulator" package, or set
+GBOS_NETSIMD), it is started as a virtual Bluetooth controller and Android is told it has
+Bluetooth. Otherwise, or with --no-bluetooth, the guest boots with no Bluetooth at all.
 """
-import argparse, fcntl, json, os, secrets, signal, subprocess, sys
+import argparse, fcntl, json, os, secrets, signal, socket, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -28,12 +32,31 @@ CMDLINE = ('console=ttyAMA0,115200 earlycon=pl011,0x9000000 panic=0 root=/dev/ra
            'androidboot.vendor.apex.com.android.hardware.audio.desktop=none loglevel=3')
 
 
+def find_netsimd():
+    sdks = [os.environ.get(k) for k in ('ANDROID_SDK', 'ANDROID_HOME', 'ANDROID_SDK_ROOT')] + [str(Path.home() / 'Library/Android/sdk')]
+    for c in [os.environ.get('GBOS_NETSIMD')] + [str(Path(s) / 'emulator/netsimd') for s in sdks if s]:
+        if c and os.access(c, os.X_OK): return c
+
+
+def start_netsimd(binary, out):
+    """Start a virtual Bluetooth controller serving HCI on a free loopback port. Returns (process, port).
+
+    netsimd exits by itself when QEMU disconnects."""
+    with socket.socket() as s:
+        s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
+    tmp = out / 'netsim'; tmp.mkdir()
+    proc = subprocess.Popen([binary, '--hci-port', str(port), '--no-web-ui', '--no-cli-ui', '--logtostderr', '--instance', '27'],
+                            cwd=tmp, env=dict(os.environ, TMPDIR=str(tmp)), stdin=subprocess.DEVNULL,
+                            stdout=(out / 'netsim.log').open('wb'), stderr=subprocess.STDOUT, start_new_session=True)
+    return proc, port
+
+
 def main():
     a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     a.add_argument('work'); a.add_argument('name')
     a.add_argument('--seconds', type=int, default=3600)
     a.add_argument('--snapshot', action='store_true'); a.add_argument('--offline', action='store_true')
-    a.add_argument('--no-audio', action='store_true')
+    a.add_argument('--no-audio', action='store_true'); a.add_argument('--no-bluetooth', action='store_true')
     a.add_argument('--display', default='1920x1200'); a.add_argument('--memory', type=int, default=4096)
     a.add_argument('--cpus', type=int, default=6)
     a.add_argument('--image', help='image folder (default WORK/image)')
@@ -55,13 +78,20 @@ def main():
     token = secrets.token_hex(16)
     (out / 'token').write_text(token); os.chmod(out / 'token', 0o600)
 
+    netsim, cmdline = None, CMDLINE + ' androidboot.gbos_token=' + token
+    netsimd = None if args.no_bluetooth else find_netsimd()
+    if netsimd:
+        netsim, bt_port = start_netsimd(netsimd, out)
+        cmdline += ' androidboot.product.vendor.sku=vmbt'
+    print('bluetooth:', f'virtual controller ({netsimd})' if netsimd else 'none', flush=True)
+
     cmd = [str(host / 'qemu-interop'), '-L', str(utm / 'Contents/Resources/qemu'), '-nodefaults', '-vga', 'none',
            '-nic', 'none', '-device', 'virtio-gpu-gl-pci,hostmem=8G,blob=true,venus=true',
            '-global', f'virtio-gpu-gl-pci.xres={width}', '-global', f'virtio-gpu-gl-pci.yres={height}',
            '-cpu', 'host', '-smp', f'cpus={args.cpus},sockets=1,cores={args.cpus},threads=1',
            '-machine', 'virt,gic-version=3,highmem=on,highmem-ecam=off', '-accel', 'hvf,ipa-granule-size=0x1000',
            '-m', str(args.memory), '-audio', 'none',
-           '-kernel', str(image / 'kernel.Image'), '-initrd', str(image / 'initrd.img'), '-append', CMDLINE + ' androidboot.gbos_token=' + token,
+           '-kernel', str(image / 'kernel.Image'), '-initrd', str(image / 'initrd.img'), '-append', cmdline,
            '-drive', f'if=none,media=disk,id=driveimage,format=raw,file={image / "googlebook.raw"}',
            '-device', 'virtio-blk-pci,drive=driveimage', '-device', 'virtio-serial', '-no-reboot',
            '-device', 'qemu-xhci,id=xhci,addr=0x5', '-device', 'usb-kbd,id=keyboard,bus=xhci.0',
@@ -74,6 +104,10 @@ def main():
     if not args.offline:
         cmd += ['-netdev', 'user,id=googlebooknet,ipv6=off',
                 '-device', 'usb-net,id=ethernet,netdev=googlebooknet,bus=xhci.0,mac=52:54:00:12:34:56']
+    if netsim:
+        # /dev/hvc0 in the guest; the Bluetooth service there speaks HCI over it.
+        cmd += ['-chardev', f'socket,id=bluetooth,host=127.0.0.1,port={bt_port},reconnect-ms=500',
+                '-device', 'virtconsole,chardev=bluetooth']
     if not args.no_audio:
         cmd += ['-audiodev', 'coreaudio,id=audio0', '-device', 'usb-audio,audiodev=audio0,bus=xhci.0']
     env = dict(os.environ, VM_QEMU_LIBRARY=str(host / 'qemu-aarch64-softmmu'),
@@ -100,6 +134,9 @@ def main():
                 os.killpg(proc.pid, signal.SIGTERM)
                 try: rc = proc.wait(timeout=8)
                 except subprocess.TimeoutExpired: os.killpg(proc.pid, signal.SIGKILL); rc = proc.wait()
+            if netsim and netsim.poll() is None:
+                try: netsim.wait(timeout=3)
+                except subprocess.TimeoutExpired: os.killpg(netsim.pid, signal.SIGTERM)
         (out / 'result.json').write_text(json.dumps({'exit_code': rc}))
         print('exit', rc, flush=True)
 
