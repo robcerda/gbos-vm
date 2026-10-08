@@ -34,7 +34,7 @@ survey() {
   if [ -n "$D8" ]; then ok "Android build-tools ($(basename "$(dirname "$D8")"))"; else miss "Android build-tools" "sdk:$SDK_BUILD_TOOLS"; fi
   if [ -n "$ANDROID_JAR" ]; then ok "Android platform ($(basename "$(dirname "$ANDROID_JAR")"))"; else miss "Android platform (API 34 or newer)" "sdk:$SDK_PLATFORM"; fi
   if [ -x "$ANDROID_SDK/emulator/netsimd" ] || [ -x "${GBOS_NETSIMD:-}" ]; then ok "Android Emulator (virtual Bluetooth radio)"
-  else printf '  optional Android Emulator: not installed, so the VM will have no Bluetooth\n'; optional_emulator=1; fi
+  else printf '  optional Android Emulator: not installed, so the VM will have no Bluetooth (it is the "emulator" package in the SDK)\n'; optional_emulator=1; fi
 }
 
 find_sdkmanager() {

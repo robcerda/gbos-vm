@@ -9,6 +9,7 @@ IMAGE_DIR="${GBOS_IMAGE_DIR:-$WORK/image}"
 "$ROOT/fetch.sh"
 # A fresh scratch folder, so nothing that already exists (your image included) is ever removed.
 NEW="$(mktemp -d "$WORK/image-new.XXXXXX")"
+trap 'rm -rf "$NEW"' EXIT
 GBOS_IMAGE_DIR="$NEW" "$ROOT/build-image.sh"
 
 say "Updating $IMAGE_DIR (previous disk kept as googlebook.raw.before-update)"
@@ -18,5 +19,4 @@ python3 "$ROOT/image/sync_super.py" "$IMAGE_DIR/googlebook.raw" "$NEW/googlebook
   || { mv -f "$IMAGE_DIR/googlebook.raw.before-update" "$IMAGE_DIR/googlebook.raw"; die "update failed; your disk is unchanged"; }
 mv -f "$NEW/initrd.img" "$NEW/kernel.Image" "$IMAGE_DIR/"
 cp "$NEW"/*.json "$IMAGE_DIR/" 2>/dev/null || true
-rm -rf "$NEW"
 say "Image updated"
