@@ -1,5 +1,7 @@
 # Shared settings for the Googlebook-on-Apple-Silicon build scripts. Source, don't run.
-set -euo pipefail
+set -Eeuo pipefail
+# Never stop without saying where: any command that ends the script prints its location.
+trap 'rc=$?; [ "$BASH_SUBSHELL" -gt 0 ] || printf "error: %s stopped at line %s (exit %s)\n" "${BASH_SOURCE[0]##*/}" "$LINENO" "$rc" >&2' ERR
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 WORK="${GOOGLEBOOK_WORK:-$ROOT/work}"
 # UTM 5.0.6 beta app bundle: supplies QEMU and the epoxy, Vulkan, MoltenVK and ANGLE frameworks.
@@ -68,4 +70,35 @@ fetch_big() { # url dest sha256
   if [ ! -f "$2" ]; then mkdir -p "$(dirname "$2")"; curl -fL --retry 5 -C - -o "$2.part" "$1"; mv "$2.part" "$2"; fi
   echo "verifying $(basename "$2")"
   [ "$(shasum -a 256 "$2" | cut -d' ' -f1)" = "$3" ] || die "checksum mismatch for $2"
+}
+
+# Android toolchain discovery, shared by prereqs.sh and build-guest.sh. Sets ANDROID_SDK,
+# ANDROID_NDK, D8, ANDROID_JAR and JAVA_HOME to what it finds (empty when missing).
+NDK_TESTED=28.2.13676358
+newest() { ls -d "$@" 2>/dev/null | sort -V | tail -1 || true; }
+find_android() {
+  local c
+  if [ -z "${ANDROID_SDK:-}" ]; then
+    for c in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" \
+             "$(brew --prefix 2>/dev/null || echo /opt/homebrew)/share/android-commandlinetools"; do
+      if [ -n "$c" ] && [ -d "$c" ]; then ANDROID_SDK="$c"; break; fi
+    done
+  fi
+  ANDROID_SDK="${ANDROID_SDK:-$HOME/Library/Android/sdk}"
+  # NDK 28.2 is what this is developed against. If it isn't installed, use the newest one that is.
+  if [ -z "${ANDROID_NDK:-}" ]; then
+    ANDROID_NDK="$ANDROID_SDK/ndk/$NDK_TESTED"
+    [ -d "$ANDROID_NDK" ] || ANDROID_NDK="$(newest "$ANDROID_SDK"/ndk/[0-9]*)"
+  fi
+  [ -x "$ANDROID_NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android35-clang" ] || ANDROID_NDK=""
+  D8="$(newest "$ANDROID_SDK"/build-tools/*/d8)"
+  ANDROID_JAR="$(newest "$ANDROID_SDK"/platforms/android-3[4-9]*/android.jar "$ANDROID_SDK"/platforms/android-[4-9][0-9]*/android.jar)"
+  if [ ! -x "${JAVA_HOME:-}/bin/javac" ]; then
+    JAVA_HOME=""
+    for c in "/Applications/Android Studio.app/Contents/jbr/Contents/Home" "$(/usr/libexec/java_home 2>/dev/null || true)" \
+             "$(brew --prefix 2>/dev/null || echo /opt/homebrew)/opt/openjdk"; do
+      if [ -x "$c/bin/javac" ]; then JAVA_HOME="$c"; break; fi
+    done
+  fi
+  export ANDROID_SDK ANDROID_NDK D8 ANDROID_JAR JAVA_HOME
 }

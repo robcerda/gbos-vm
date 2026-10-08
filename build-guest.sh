@@ -4,26 +4,11 @@
 #   the pointer/clipboard helper, a Vulkan self-test, and guest_graphics_memfd_policy.
 # Needs the Android NDK, SDK build-tools and platform, and a JDK. Output: $WORK/guest, $WORK/tools.
 . "$(dirname "$0")/lib.sh"
-ANDROID_SDK="${ANDROID_SDK:-$HOME/Library/Android/sdk}"
-# NDK 28.2 is what this is developed against. If it isn't installed, use the newest one that is.
-NDK_TESTED=28.2.13676358
-if [ -z "${ANDROID_NDK:-}" ]; then
-  ANDROID_NDK="$ANDROID_SDK/ndk/$NDK_TESTED"
-  [ -d "$ANDROID_NDK" ] || ANDROID_NDK="$(ls -d "$ANDROID_SDK"/ndk/[0-9]* 2>/dev/null | sort -V | tail -1)"
-  [ -n "$ANDROID_NDK" ] || die "no Android NDK found under $ANDROID_SDK/ndk (install one, or set ANDROID_NDK)"
-  [ "$(basename "$ANDROID_NDK")" = "$NDK_TESTED" ] || echo "note: NDK $NDK_TESTED not installed; using $(basename "$ANDROID_NDK")"
-fi
+find_android
+[ -n "$ANDROID_NDK" ] && [ -n "$D8" ] && [ -n "$ANDROID_JAR" ] && [ -n "$JAVA_HOME" ] \
+  || die "Android build tools are missing. Run ./prereqs.sh to see what, and to install it."
+[ "$(basename "$ANDROID_NDK")" = "$NDK_TESTED" ] || echo "note: NDK $NDK_TESTED not installed; using $(basename "$ANDROID_NDK")"
 NDK_BIN="$ANDROID_NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
-[ -x "$NDK_BIN/aarch64-linux-android35-clang" ] || die "$ANDROID_NDK has no API 35 arm64 compiler (install a newer NDK, or set ANDROID_NDK)"
-D8="$(ls "$ANDROID_SDK"/build-tools/*/d8 2>/dev/null | sort | tail -1)"; [ -n "$D8" ] || die "Android build-tools (d8) not found under $ANDROID_SDK"
-ANDROID_JAR="$(ls "$ANDROID_SDK"/platforms/android-3[4-9]*/android.jar 2>/dev/null | sort | tail -1)"; [ -n "$ANDROID_JAR" ] || die "Android platform (android.jar) not found under $ANDROID_SDK"
-if [ -z "${JAVA_HOME:-}" ]; then
-  for c in "/Applications/Android Studio.app/Contents/jbr/Contents/Home" "$(/usr/libexec/java_home 2>/dev/null || true)" /opt/homebrew/opt/openjdk; do
-    [ -x "$c/bin/javac" ] && JAVA_HOME="$c" && break
-  done
-fi
-[ -x "${JAVA_HOME:-}/bin/javac" ] || die "no JDK found (set JAVA_HOME)"
-export JAVA_HOME
 [ -x "$WORK/env/bin/meson" ] || die "run build-host.sh first (it creates the meson environment)"
 export PATH="$WORK/env/bin:$PATH" CCACHE_DISABLE=1
 mkdir -p "$WORK/src" "$WORK/build" "$WORK/guest/mesa-runtime" "$WORK/tools" "$WORK/android-pkgconfig"
