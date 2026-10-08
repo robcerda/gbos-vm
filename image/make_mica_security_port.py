@@ -77,6 +77,10 @@ for n in ['keymint','secureclock','sharedsecret']:
 if '--graphics' in sys.argv:
  from mica_graphics_port import apply
  apply(add,original)
+extra_dirs,new_dirs=[],['lib64/vm_keymint']
+if '--bluetooth' in sys.argv:
+ from mica_bluetooth_port import apply as bluetooth
+ old,new=bluetooth(add,original,files);extra_dirs+=old;new_dirs+=new
 if '--allocator-alignment' in sys.argv:
  assert '--graphics' in sys.argv
  donor=R/'artifacts/graphics-port-review/minigbm-alignment'
@@ -107,12 +111,11 @@ on post-fs-data
 ''','vendor_configs_file')
  (O/'venus-experiment.json').write_text(json.dumps({'status':'Venus Vulkan driver installed','driver_sha256':hashlib.sha256(driver.read_bytes()).hexdigest(),'driver':'Mesa 26.2.4 Android ARM64 Venus','desktop':'retains GLES','test':'enumerate Vulkan device, fill 4KiB buffer and verify readback','security_policy':'unchanged'})+'\n')
 if '--quiet-absent-hardware' in sys.argv:
- # The VM has no TPM or Trusty; stop these services after their first failure
- # instead of letting init restart them (and dump a tombstone) every 5 seconds.
- add('etc/init/vm-absent-hardware.rc',b'''on property:init.svc.android.system.desktop.security.gscd=restarting
+ # The VM has no TPM or Trusty. Left alone, init restarts these services (and dumps a
+ # tombstone) every 5 seconds. Disable them before they first start. (A stop-on-restart
+ # trigger does not work for the TPM daemon: a vendor script cannot watch its init.svc property.)
+ add('etc/init/vm-absent-hardware.rc',b'''on early-init
     stop android.system.desktop.security.gscd
-
-on property:init.svc.vendor.secretkeeper.trusty=restarting
     stop vendor.secretkeeper.trusty
 ''','vendor_configs_file')
 if '--host-control' in sys.argv:
@@ -266,8 +269,9 @@ done
 with tarfile.open(O/'overlay.tar','w',format=tarfile.PAX_FORMAT) as t:
  dirs=['.','bin','bin/hw','etc','etc/init','etc/init/hw','etc/selinux','etc/vintf','etc/vintf/manifest','lib64','lib64/hw','lib64/egl','lib64/vm_keymint']
  if '--audio' in sys.argv:dirs.append('apex')
+ dirs+=extra_dirs+new_dirs[1:]
  for n in dirs:
-  m=metadata(raw,'/'+n if n!='.' else '/',off) if n!='lib64/vm_keymint' else {'mode':0o40755,'uid':0,'gid':2000,'mtime':1230768000,'xattrs':{'security.selinux':b'u:object_r:vendor_file:s0'}}
+  m=metadata(raw,'/'+n if n!='.' else '/',off) if n not in new_dirs else {'mode':0o40755,'uid':0,'gid':2000,'mtime':1230768000,'xattrs':{'security.selinux':b'u:object_r:vendor_file:s0' if n.startswith('lib64') else b'u:object_r:vendor_configs_file:s0'}}
   ti=tarfile.TarInfo(n);ti.type=tarfile.DIRTYPE;ti.mode=m['mode']&0o7777;ti.uid=m['uid'];ti.gid=m['gid'];ti.mtime=m['mtime']
   ti.pax_headers={} if n=='.' else {'SCHILY.xattr.'+k:v.decode() for k,v in m['xattrs'].items()};t.addfile(ti)
  for n,(b,label,mode) in files.items():
@@ -302,7 +306,7 @@ for n,(b,label,mode) in files.items():
 for p in ['/etc/init/hw/init.android-desktop.rc','/etc/selinux/precompiled_sepolicy']:
  if p=='/etc/selinux/precompiled_sepolicy' and '--vm-compat' in sys.argv:continue
  assert subprocess.check_output([str(D/'dump.erofs'),'--path='+p,'--cat',str(v)])==subprocess.check_output([str(D/'dump.erofs'),'--offset='+str(off),'--path='+p,'--cat',str(raw)])
-for n in [p for p in dirs if p!='lib64/vm_keymint']:
+for n in [p for p in dirs if p not in new_dirs]:
  assert metadata(v,'/'+n if n!='.' else '/')==metadata(raw,'/'+n if n!='.' else '/',off),n
 # APFS clone is a separate regular file; writes copy-on-write, not shared writes.
 copy=O/'googlebook.raw';subprocess.run(['cp','-c',str(raw),str(copy)],check=True)

@@ -44,7 +44,7 @@ PY
 )"
   fetch_big "$url" "$DOWNLOADS/$CUTTLEFISH_ZIP" "$CUTTLEFISH_SHA256"
 fi
-if [ ! -f "$WORK/cuttlefish/manifest.json" ]; then
+if [ ! -f "$WORK/cuttlefish/manifest.json" ] || [ ! -f "$WORK/cuttlefish/bluetooth/android.hardware.bluetooth-service.cuttlefish" ]; then
   PATH="$(brew --prefix erofs-utils)/bin:$(brew --prefix e2fsprogs)/sbin:$PATH" \
     python3 "$ROOT/tools/unpack_cuttlefish.py" "$DOWNLOADS/$CUTTLEFISH_ZIP" "$WORK/cuttlefish"
 fi

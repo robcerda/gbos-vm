@@ -3,7 +3,8 @@
 
 Input:  aosp_cf_arm64_only_phone-img-16373615.zip from ci.android.com (never redistributed).
 Output: a folder with the software KeyMint/Gatekeeper/audio/boot-control packages, the
-        minigbm allocator and DRM composer binaries, and the virtio/DMA-heap kernel modules.
+        minigbm allocator and DRM composer binaries, the HCI-over-serial Bluetooth service,
+        and the virtio/DMA-heap kernel modules.
 
 Every file is read out of the image without mounting it. Needs dump.erofs (erofs-utils),
 debugfs (e2fsprogs) and lz4 on PATH or passed with --tools.
@@ -35,6 +36,7 @@ FILES = {
     'graphics/extracted/gralloc.default.so': ('vendor', '/lib64/hw/gralloc.default.so'),
     'graphics/cf-composer/android.hardware.composer.hwc3-service.drm': ('apex:com.android.hardware.graphics.composer.drm_hwcomposer.apex', '/bin/hw/android.hardware.composer.hwc3-service.drm'),
     'graphics/cf-composer/drm_hwcomposer_atom_reporter.so': ('apex:com.android.hardware.graphics.composer.drm_hwcomposer.apex', '/lib64/drm_hwcomposer_atom_reporter.so'),
+    'bluetooth/android.hardware.bluetooth-service.cuttlefish': ('apex:com.google.cf.bt.apex', '/bin/hw/android.hardware.bluetooth-service.cuttlefish'),
     'modules/system_heap.ko': ('vendor_dlkm', '/lib/modules/system_heap.ko'),
 }
 RAMDISK_MODULES = ['virtio_pci_legacy_dev.ko', 'virtio_pci_modern_dev.ko', 'virtio_pci.ko',
