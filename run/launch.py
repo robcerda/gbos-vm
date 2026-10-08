@@ -46,6 +46,7 @@ def main():
     options = ['--memory', setting('MemoryMiB', '4096'), '--cpus', setting('CPUs', '6')]
     if setting('Networking', '1') == '0': options.append('--offline')
     if setting('Audio', '1') == '0': options.append('--no-audio')
+    if setting('Bluetooth', '1') == '0': options.append('--no-bluetooth')
     density = round(240 * width / 1920)
     name = 'desktop-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     run_dir = work / 'logs' / name

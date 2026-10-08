@@ -35,7 +35,7 @@ The first boot takes about 45 seconds on a M5 MacBook. If you land on a user pic
 - A **JDK**. If you have Android Studio, its bundled one gets picked up automatically.
 - Optionally, the **Android Emulator** package from the SDK. Bluetooth borrows its virtual radio (see [What doesn't work yet](#what-doesnt-work-yet)); without it the VM boots with no Bluetooth.
 
-The script installs `erofs-utils`, `e2fsprogs`, `lz4` and `pkgconf` from Homebrew if they're missing. It never asks for `sudo`.
+`install.sh` checks all of this before it downloads anything, and offers to install what's missing — the Homebrew packages, a JDK, and the Android pieces through Google's `sdkmanager` (you don't need Android Studio). It never asks for `sudo`. Run `./prereqs.sh` on its own to see where you stand.
 
 We build and test on one machine (M5, 16 GB, macOS 27). A couple of people have reported it working on M4 Macs too — if you try it on something else, tell us how it went.
 

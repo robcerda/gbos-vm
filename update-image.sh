@@ -7,7 +7,8 @@ no_running_vm
 IMAGE_DIR="${GBOS_IMAGE_DIR:-$WORK/image}"
 [ -f "$IMAGE_DIR/googlebook.raw" ] || die "no existing image in $IMAGE_DIR; run ./build-image.sh"
 "$ROOT/fetch.sh"
-NEW="$WORK/image-new"; rm -rf "$NEW"
+# A fresh scratch folder, so nothing that already exists (your image included) is ever removed.
+NEW="$(mktemp -d "$WORK/image-new.XXXXXX")"
 GBOS_IMAGE_DIR="$NEW" "$ROOT/build-image.sh"
 
 say "Updating $IMAGE_DIR (previous disk kept as googlebook.raw.before-update)"

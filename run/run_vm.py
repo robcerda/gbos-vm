@@ -13,7 +13,7 @@ Bluetooth: if the Android emulator's netsimd is installed (SDK "emulator" packag
 GBOS_NETSIMD), it is started as a virtual Bluetooth controller and Android is told it has
 Bluetooth. Otherwise, or with --no-bluetooth, the guest boots with no Bluetooth at all.
 """
-import argparse, fcntl, json, os, secrets, signal, socket, subprocess, sys
+import argparse, atexit, fcntl, json, os, secrets, signal, socket, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -33,7 +33,10 @@ CMDLINE = ('console=ttyAMA0,115200 earlycon=pl011,0x9000000 panic=0 root=/dev/ra
 
 
 def find_netsimd():
-    sdks = [os.environ.get(k) for k in ('ANDROID_SDK', 'ANDROID_HOME', 'ANDROID_SDK_ROOT')] + [str(Path.home() / 'Library/Android/sdk')]
+    # The last two are where prereqs.sh puts the SDK when it installs one through Homebrew.
+    sdks = [os.environ.get(k) for k in ('ANDROID_SDK', 'ANDROID_HOME', 'ANDROID_SDK_ROOT')] + [
+        str(Path.home() / 'Library/Android/sdk'), '/opt/homebrew/share/android-commandlinetools',
+        '/usr/local/share/android-commandlinetools']
     for c in [os.environ.get('GBOS_NETSIMD')] + [str(Path(s) / 'emulator/netsimd') for s in sdks if s]:
         if c and os.access(c, os.X_OK): return c
 
@@ -41,13 +44,19 @@ def find_netsimd():
 def start_netsimd(binary, out):
     """Start a virtual Bluetooth controller serving HCI on a free loopback port. Returns (process, port).
 
-    netsimd exits by itself when QEMU disconnects."""
+    netsimd exits by itself when QEMU disconnects; if this script ends before that (QEMU never
+    started, say), it is stopped on the way out."""
     with socket.socket() as s:
         s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
     tmp = out / 'netsim'; tmp.mkdir()
     proc = subprocess.Popen([binary, '--hci-port', str(port), '--no-web-ui', '--no-cli-ui', '--logtostderr', '--instance', '27'],
                             cwd=tmp, env=dict(os.environ, TMPDIR=str(tmp)), stdin=subprocess.DEVNULL,
                             stdout=(out / 'netsim.log').open('wb'), stderr=subprocess.STDOUT, start_new_session=True)
+    def stop():
+        if proc.poll() is None:
+            try: os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError: pass
+    atexit.register(stop)
     return proc, port
 
 
