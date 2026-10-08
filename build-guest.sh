@@ -5,9 +5,16 @@
 # Needs the Android NDK, SDK build-tools and platform, and a JDK. Output: $WORK/guest, $WORK/tools.
 . "$(dirname "$0")/lib.sh"
 ANDROID_SDK="${ANDROID_SDK:-$HOME/Library/Android/sdk}"
-ANDROID_NDK="${ANDROID_NDK:-$ANDROID_SDK/ndk/28.2.13676358}"
+# NDK 28.2 is what this is developed against. If it isn't installed, use the newest one that is.
+NDK_TESTED=28.2.13676358
+if [ -z "${ANDROID_NDK:-}" ]; then
+  ANDROID_NDK="$ANDROID_SDK/ndk/$NDK_TESTED"
+  [ -d "$ANDROID_NDK" ] || ANDROID_NDK="$(ls -d "$ANDROID_SDK"/ndk/[0-9]* 2>/dev/null | sort -V | tail -1)"
+  [ -n "$ANDROID_NDK" ] || die "no Android NDK found under $ANDROID_SDK/ndk (install one, or set ANDROID_NDK)"
+  [ "$(basename "$ANDROID_NDK")" = "$NDK_TESTED" ] || echo "note: NDK $NDK_TESTED not installed; using $(basename "$ANDROID_NDK")"
+fi
 NDK_BIN="$ANDROID_NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
-[ -x "$NDK_BIN/aarch64-linux-android35-clang" ] || die "Android NDK 28 not found at $ANDROID_NDK (set ANDROID_NDK)"
+[ -x "$NDK_BIN/aarch64-linux-android35-clang" ] || die "$ANDROID_NDK has no API 35 arm64 compiler (install a newer NDK, or set ANDROID_NDK)"
 D8="$(ls "$ANDROID_SDK"/build-tools/*/d8 2>/dev/null | sort | tail -1)"; [ -n "$D8" ] || die "Android build-tools (d8) not found under $ANDROID_SDK"
 ANDROID_JAR="$(ls "$ANDROID_SDK"/platforms/android-3[4-9]*/android.jar 2>/dev/null | sort | tail -1)"; [ -n "$ANDROID_JAR" ] || die "Android platform (android.jar) not found under $ANDROID_SDK"
 if [ -z "${JAVA_HOME:-}" ]; then

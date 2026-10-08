@@ -31,7 +31,7 @@ The first boot takes about 45 seconds on a M5 MacBook. If you land on a user pic
 - An **Apple Silicon Mac**. Intel Macs won't work — this is an ARM guest running on the hypervisor, not emulation.
 - **16 GB of RAM**, realistically. The VM gets 4 GB and the builds want a few more.
 - **Xcode command line tools** and **[Homebrew](https://brew.sh)**.
-- The **Android SDK** with NDK `28.2.13676358`, a build-tools version, and a platform (API 34+). Android Studio's defaults are fine.
+- The **Android SDK** with an NDK, a build-tools version, and a platform (API 34+). Android Studio's defaults are fine. We build with NDK `28.2.13676358`; if you don't have that one the script uses your newest (30 is reported to work), or set `ANDROID_NDK` to pick.
 - A **JDK**. If you have Android Studio, its bundled one gets picked up automatically.
 
 The script installs `erofs-utils`, `e2fsprogs`, `lz4` and `pkgconf` from Homebrew if they're missing. It never asks for `sudo`.
