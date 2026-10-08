@@ -33,6 +33,7 @@ The first boot takes about 45 seconds on a M5 MacBook. If you land on a user pic
 - **Xcode command line tools** and **[Homebrew](https://brew.sh)**.
 - The **Android SDK** with an NDK, a build-tools version, and a platform (API 34+). Android Studio's defaults are fine. We build with NDK `28.2.13676358`; if you don't have that one the script uses your newest (30 is reported to work), or set `ANDROID_NDK` to pick.
 - A **JDK**. If you have Android Studio, its bundled one gets picked up automatically.
+- Optionally, the **Android Emulator** package from the SDK. Bluetooth borrows its virtual radio (see [What doesn't work yet](#what-doesnt-work-yet)); without it the VM boots with no Bluetooth.
 
 The script installs `erofs-utils`, `e2fsprogs`, `lz4` and `pkgconf` from Homebrew if they're missing. It never asks for `sudo`.
 
@@ -51,9 +52,20 @@ We build and test on one machine (M5, 16 GB, macOS 27). A couple of people have 
 
 Quitting (or closing the window) shuts Android down properly. Your data lives in `work/image/googlebook.raw` and sticks around between runs.
 
-**Settings** (`⌘,`) has the pointer mode, resolution, memory, CPU cores, and toggles for networking and audio. Pointer mode changes right away; everything else is a VM option, so it applies the next time you start it.
+**Settings** (`⌘,`) has the pointer mode, resolution, memory, CPU cores, and toggles for networking, audio and Bluetooth. Pointer mode changes right away; everything else is a VM option, so it applies the next time you start it.
 
 Resolution defaults to your display's native pixels at 16:10. On a notched MacBook that's exactly the area below the notch, so full screen is pixel-for-pixel.
+
+### Updating
+
+After a `git pull`, rebuild the app and refresh the system part of your disk. Quit the VM first.
+
+```bash
+./build-host.sh
+./update-image.sh
+```
+
+`update-image.sh` keeps your data — it only replaces the system area, and it leaves the previous disk next to the new one as `googlebook.raw.before-update` in case something goes wrong.
 
 If you'd rather drive it from a terminal, `python3 run/launch.py work` does the same thing and takes `--display 1920x1200` and `--fullscreen`.
 
@@ -75,14 +87,14 @@ The image starts as Google's unmodified recovery download. We don't touch the sy
 - **Software KeyMint and Gatekeeper** instead of hardware-backed ones. Your keys aren't protected by a secure element, because there isn't one.
 - **No verified boot on the vendor partition.** The other partitions keep their original verity; the one we modify can't.
 - **Three extra SELinux rules**, all narrowly about graphics buffer sharing. SELinux stays enforcing.
+- **Cuttlefish's Bluetooth service** instead of the Qualcomm one, talking to a virtual radio on your Mac over a virtual serial port.
 - **A helper running as the Android shell user** that takes pointer and clipboard input from the viewer. It only accepts a host that presents a random per-boot token, and it listens to nothing — it connects out to `127.0.0.1` on your Mac.
 
 So: treat it like a dev VM. It's great for poking at the OS. I wouldn’t daily drive it or anything, but I’m sure some freaks (laudatory) will try.
 
 ## What doesn't work yet
 
-- **Bluetooth.** It crashes on boot and Android will tell you about it. Dismiss the dialog.
-- **A TPM daemon crash-loops in the background.** It's harmless but it wastes a bit of CPU. We haven't found a clean way to stop it yet.
+- **Bluetooth is virtual only.** If you have the Android Emulator installed, the VM gets its simulated radio (`netsimd`): Bluetooth turns on, but there's nothing real to pair with. Actual devices would need a USB dongle bridged in, which we haven't built. Without the emulator, Android is told it has no Bluetooth at all.
 - **60 fps cap** on the guest display. The QEMU build we use doesn't expose a refresh rate setting.
 - **Flat shading can be wrong.** Chrome needs a Vulkan extension MoltenVK doesn't have, so we tell the guest it exists. That's fine for almost everything; `flat`-interpolated WebGL content may pick the wrong vertex.
 - **Copying *out* of the guest, right-click, and long sessions** are implemented but haven't had a proper test. They might be fine. They might not.
@@ -108,6 +120,7 @@ fetch.sh            downloads + verifies the Googlebook image, Cuttlefish, and U
 build-host.sh       patched virglrenderer, QEMU launcher, viewer
 build-guest.sh      Mesa (GLES + Vulkan), pointer helper, SELinux policy tool
 build-image.sh      assembles the bootable disk
+update-image.sh     refreshes an existing disk after a git pull, keeping your data
 run/                VM runner and a command-line launcher (the app bundles these)
 image/              the scripts that rebuild the vendor partition
 guest/  host/       sources for the bits we wrote
